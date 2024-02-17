@@ -1,24 +1,60 @@
 package com.myorg;
 
+import software.amazon.awscdk.*;
+import software.amazon.awscdk.services.ec2.*;
+import software.amazon.awscdk.services.ec2.InstanceType;
+import software.amazon.awscdk.services.rds.*;
 import software.constructs.Construct;
-import software.amazon.awscdk.Stack;
-import software.amazon.awscdk.StackProps;
-// import software.amazon.awscdk.Duration;
-// import software.amazon.awscdk.services.sqs.Queue;
 
-public class AwsInfraStack extends Stack {
-    public AwsInfraStack(final Construct scope, final String id) {
-        this(scope, id, null);
+import java.util.Collections;
+
+public class RdsStack extends Stack {
+    public RdsStack(final Construct scope, final String id, final Vpc vpc) {
+        this(scope, id, null, vpc);
     }
 
-    public AwsInfraStack(final Construct scope, final String id, final StackProps props) {
+    public RdsStack(final Construct scope, final String id, final StackProps props, final Vpc vpc) {
         super(scope, id, props);
 
-        // The code that defines your stack goes here
+        //Parâmetro que será preenchido no momento do deploy
+        CfnParameter senha = CfnParameter.Builder.create (this, "senha")
+            .type("String")
+                    .description("Senha do database demo")
+                    .build();
 
-        // example resource
-        // final Queue queue = Queue.Builder.create(this, "AwsInfraQueue")
-        //         .visibilityTimeout(Duration.seconds(300))
-        //         .build();
+        ISecurityGroup iSecurityGroup = SecurityGroup.fromSecurityGroupId(this, id, vpc.getVpcDefaultSecurityGroup());
+        iSecurityGroup.addIngressRule(Peer.anyIpv4(), Port.tcp(5432));
+
+        DatabaseInstance database = DatabaseInstance.Builder
+                .create(this, "Rds-demo")
+                .instanceIdentifier("demo-db")
+                .engine(DatabaseInstanceEngine.postgres(PostgresInstanceEngineProps.builder()
+                        .version(PostgresEngineVersion.VER_12)
+                        .build()))
+                .vpc(vpc)
+                .credentials(Credentials.fromUsername("postgres",
+                CredentialsFromUsernameOptions.builder()
+                        .password(SecretValue.unsafePlainText(senha.getValueAsString()))
+                        .build()))
+                .instanceType(InstanceType.of(InstanceClass.T2, InstanceSize.MICRO))
+                .multiAz(false)
+                .allocatedStorage(10)
+                .securityGroups(Collections.singletonList(iSecurityGroup))
+                .vpcSubnets(SubnetSelection.builder()
+                        //.subnets(vpc.getPrivateSubnets())
+                        .subnets(vpc.getPublicSubnets()) // //para quando definir .natGateways(0) na VPC
+                        .build())
+                .build();
+
+        CfnOutput.Builder.create(this, "demo-db-endpoint")
+                .exportName("demo-db-endpoint")
+                .value(database.getDbInstanceEndpointAddress())
+                .build();
+
+        CfnOutput.Builder.create(this, "demo-db-senha")
+                .exportName("demo-db-senha")
+                .value(senha.getValueAsString())
+                .build();
+
     }
 }

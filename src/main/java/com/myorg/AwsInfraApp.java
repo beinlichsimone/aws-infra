@@ -1,40 +1,22 @@
 package com.myorg;
 
 import software.amazon.awscdk.App;
-import software.amazon.awscdk.Environment;
-import software.amazon.awscdk.StackProps;
-
-import java.util.Arrays;
 
 public class AwsInfraApp {
     public static void main(final String[] args) {
         App app = new App();
 
-        new AwsInfraStack(app, "AwsInfraStack", StackProps.builder()
-                // If you don't specify 'env', this stack will be environment-agnostic.
-                // Account/Region-dependent features and context lookups will not work,
-                // but a single synthesized template can be deployed anywhere.
+        VpcStack vpc = new VpcStack(app, "Vpc");
 
-                // Uncomment the next block to specialize this stack for the AWS Account
-                // and Region that are implied by the current CLI configuration.
-                /*
-                .env(Environment.builder()
-                        .account(System.getenv("CDK_DEFAULT_ACCOUNT"))
-                        .region(System.getenv("CDK_DEFAULT_REGION"))
-                        .build())
-                */
+        ClusterStack cluster = new ClusterStack(app, "Cluster", vpc.getVpc());
+        cluster.addDependency(vpc);
 
-                // Uncomment the next block if you know exactly what Account and Region you
-                // want to deploy the stack to.
-                /*
-                .env(Environment.builder()
-                        .account("123456789012")
-                        .region("us-east-1")
-                        .build())
-                */
+        RdsStack rds = new RdsStack(app, "Rds", vpc.getVpc());
+        rds.addDependency(vpc);
 
-                // For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
-                .build());
+        ServiceStack service = new ServiceStack(app, "Service", cluster.getCluster());
+        service.addDependency(cluster);
+        service.addDependency(rds);
 
         app.synth();
     }
